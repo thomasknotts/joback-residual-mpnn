@@ -1,7 +1,10 @@
 # JR-MPNN Thermophysical Property Predictor
 
-Streamlit web application for predicting five thermophysical properties using the
+Application for predicting five thermophysical properties using the
 **Joback-Residual Message Passing Neural Network (JR-MPNN)**.
+
+Try the Streamlit app here:
+[Open the JR-MPNN Thermophysical Property Predictor](https://joback-residual-mpnn.streamlit.app/)
 
 ---
 
