@@ -41,7 +41,8 @@ CUSTOM_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@300;400;500&display=swap');
 
 :root {
-    --page-gutter: max(32px, calc((100vw - 1400px) / 2));
+    --page-gutter: clamp(24px, 4vw, 64px);
+    --content-width: 1400px;
 }
 
 /* ── Hide Streamlit chrome ─────────────────────────────────── */
@@ -63,7 +64,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 /* ── Custom header ─────────────────────────────────────────── */
 .jr-header {
     background: #002E5D;
-    padding: 14px var(--page-gutter);
+    padding: 14px 24px;
     border-bottom: 1px solid #1a3f6f;
     margin-bottom: 0;
 }
@@ -87,7 +88,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 /* ── Tabs — fused with header ──────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
     background: #002E5D !important;
-    padding: 10px var(--page-gutter) 0 var(--page-gutter) !important;
+    padding: 10px 24px 0 24px !important;
     gap: 4px !important;
 }
 .stTabs [data-baseweb="tab"] {
@@ -112,7 +113,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 .stTabs [data-baseweb="tab-highlight"],
 .stTabs [data-baseweb="tab-border"] { display: none !important; }
 .stTabs [data-baseweb="tab-panel"] {
-    padding: 32px var(--page-gutter) 64px !important;
+    padding: 32px 0 0 !important;
     background: #ffffff !important;
 }
 
@@ -523,13 +524,24 @@ html, body { font-family: 'Inter', sans-serif !important; }
 
 /* ── Responsive page gutters ───────────────────────────────── */
 @media (max-width: 700px) {
-    :root {
-        --page-gutter: 18px;
+    .block-container {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        padding-bottom: 40px !important;
+    }
+
+    .jr-header {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
     }
 
     .stTabs [data-baseweb="tab-panel"] {
         padding-top: 24px !important;
-        padding-bottom: 40px !important;
     }
 }
 
