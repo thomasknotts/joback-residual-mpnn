@@ -1,21 +1,42 @@
-"""JR-MPNN Thermophysical Property Predictor — Streamlit Application"""
+"""
+JR-MPNN Thermophysical Property Predictor — Streamlit Application
+"""
 
-import os, sys, warningswarnings.filterwarnings("ignore")
+import os, sys, warnings
+warnings.filterwarnings("ignore")
 
-import torchimport streamlit as stimport pandas as pdfrom rdkit import Chemfrom rdkit.Chem.Draw import rdMolDraw2D
+import torch
+import streamlit as st
+import pandas as pd
+from rdkit import Chem
+from rdkit.Chem.Draw import rdMolDraw2D
 
-BASE_DIR = os.path.dirname(os.path.abspath(file))sys.path.insert(0, BASE_DIR)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
-from utils.model_classes import JRMPNNfrom utils.molecular_graph import n_atom_features, n_bond_featuresfrom utils.prediction import (PROPERTY_CONFIG, validate_smiles, get_joback_prediction,get_joback_groups, mol_to_graph, predict_property,)
+from utils.model_classes import JRMPNN
+from utils.molecular_graph import n_atom_features, n_bond_features
+from utils.prediction import (
+    PROPERTY_CONFIG, validate_smiles, get_joback_prediction,
+    get_joback_groups, mol_to_graph, predict_property,
+)
 
-st.set_page_config(page_title="JR-MPNN Property Predictor",page_icon="⚗",layout="wide",initial_sidebar_state="collapsed",)
+st.set_page_config(
+    page_title="JR-MPNN Property Predictor",
+    page_icon="⚗",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')MODELS_DIR = os.path.join(BASE_DIR, 'models')NODE_DIM   = n_atom_features()EDGE_DIM   = n_bond_features()COND_DIM   = 42
+DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+NODE_DIM   = n_atom_features()
+EDGE_DIM   = n_bond_features()
+COND_DIM   = 42
 
-── CSS ───────────────────────────────────────────────────────────────────────
 
+# ── CSS ───────────────────────────────────────────────────────────────────────
 CUSTOM_CSS = """
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@300;400;500&display=swap');
 
@@ -517,11 +538,9 @@ html, body { font-family: 'Inter', sans-serif !important; }
     border-radius: 10px;
 }
 </style>
-
 """
 
 HEADER_HTML = """
-
 <div class="jr-header">
   <div>
     <h1>Thermophysical Property Predictor</h1>
@@ -530,20 +549,127 @@ HEADER_HTML = """
 </div>
 """
 
-── Model loading ─────────────────────────────────────────────────────────────
 
-@st.cache_resource(show_spinner="Loading models…")def load_models():models = {}for prop, cfg in PROPERTY_CONFIG.items():path = os.path.join(MODELS_DIR, cfg['model_file'])if not os.path.exists(path):continuemodel = JRMPNN(node_dim=NODE_DIM, edge_dim=EDGE_DIM,hidden_dim=cfg['hidden_dim'], num_layers=cfg['num_layers'],cond_dim=COND_DIM,).to(DEVICE)model.load_state_dict(torch.load(path, map_location=DEVICE))model.eval()models[prop] = modelreturn models
+# ── Model loading ─────────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner="Loading models…")
+def load_models():
+    models = {}
+    for prop, cfg in PROPERTY_CONFIG.items():
+        path = os.path.join(MODELS_DIR, cfg['model_file'])
+        if not os.path.exists(path):
+            continue
+        model = JRMPNN(
+            node_dim=NODE_DIM, edge_dim=EDGE_DIM,
+            hidden_dim=cfg['hidden_dim'], num_layers=cfg['num_layers'],
+            cond_dim=COND_DIM,
+        ).to(DEVICE)
+        model.load_state_dict(torch.load(path, map_location=DEVICE))
+        model.eval()
+        models[prop] = model
+    return models
 
-── Helpers ───────────────────────────────────────────────────────────────────
 
-def smiles_to_svg(smiles: str, width=420, height=300) -> str | None:mol = Chem.MolFromSmiles(smiles)if mol is None:return Nonedrawer = rdMolDraw2D.MolDraw2DSVG(width, height)opts = drawer.drawOptions()opts.addAtomIndices = Falseopts.bondLineWidth  = 1.8opts.padding        = 0.14try:rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)except Exception:drawer.DrawMolecule(mol)drawer.FinishDrawing()svg = drawer.GetDrawingText()svg = svg.replace("rect style='opacity:1.0;fill:#FFFFFF","rect style='opacity:0.0;fill:#FFFFFF")return svg
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def smiles_to_svg(smiles: str, width=420, height=300) -> str | None:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+    opts = drawer.drawOptions()
+    opts.addAtomIndices = False
+    opts.bondLineWidth  = 1.8
+    opts.padding        = 0.14
+    try:
+        rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
+    except Exception:
+        drawer.DrawMolecule(mol)
+    drawer.FinishDrawing()
+    svg = drawer.GetDrawingText()
+    svg = svg.replace("rect style='opacity:1.0;fill:#FFFFFF",
+                      "rect style='opacity:0.0;fill:#FFFFFF")
+    return svg
 
-def run_single(smiles: str, models: dict):valid, err = validate_smiles(smiles)if not valid:return None, errgroups  = get_joback_groups(smiles)results = {}for prop in PROPERTY_CONFIG:if prop not in models:continuey_joback = get_joback_prediction(smiles, prop)if y_joback is None:results[prop] = {'error': 'Joback method failed'}continuegraph = mol_to_graph(smiles, y_joback, groups)if graph is None:results[prop] = {'error': 'Graph build failed'}continuetry:r   = predict_property(models[prop], graph, prop, DEVICE)cfg = PROPERTY_CONFIG[prop]results[prop] = {'full_name':  cfg['full_name'],'unit':       cfg['unit'],'prediction': r['prediction'],'lower':      r['lower'],'upper':      r['upper'],'joback':     round(y_joback, 3),'residual':   round(r['prediction'] - y_joback, 4 if prop == 'Vc' else 3),}except Exception as e:results[prop] = {'error': str(e)}return results, None
 
-def run_batch(entries: list, prop: str, models: dict) -> list:unit = PROPERTY_CONFIG[prop]['unit']rows = []for entry in entries:smiles = entry.get('smiles', '').strip()name   = entry.get('name', smiles[:30])valid, err = validate_smiles(smiles)if not valid:rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,'Lower 95%': None, 'Upper 95%': None,'Joback': None, 'Unit': unit,'Status': f'Error: {err}'})continuey_joback = get_joback_prediction(smiles, prop)if y_joback is None:rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,'Lower 95%': None, 'Upper 95%': None,'Joback': None, 'Unit': unit, 'Status': 'Joback failed'})continuegraph = mol_to_graph(smiles, y_joback, get_joback_groups(smiles))if graph is None:rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,'Lower 95%': None, 'Upper 95%': None,'Joback': None, 'Unit': unit, 'Status': 'Graph build failed'})continuetry:r = predict_property(models[prop], graph, prop, DEVICE)rows.append({'Name': name, 'SMILES': smiles,'Prediction': r['prediction'],'Lower 95%':  r['lower'],'Upper 95%':  r['upper'],'Joback':     round(y_joback, 3),'Unit':       unit, 'Status': 'OK',})except Exception as e:rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,'Lower 95%': None, 'Upper 95%': None,'Joback': None, 'Unit': unit, 'Status': f'Error: {e}'})return rows
+def run_single(smiles: str, models: dict):
+    valid, err = validate_smiles(smiles)
+    if not valid:
+        return None, err
+    groups  = get_joback_groups(smiles)
+    results = {}
+    for prop in PROPERTY_CONFIG:
+        if prop not in models:
+            continue
+        y_joback = get_joback_prediction(smiles, prop)
+        if y_joback is None:
+            results[prop] = {'error': 'Joback method failed'}
+            continue
+        graph = mol_to_graph(smiles, y_joback, groups)
+        if graph is None:
+            results[prop] = {'error': 'Graph build failed'}
+            continue
+        try:
+            r   = predict_property(models[prop], graph, prop, DEVICE)
+            cfg = PROPERTY_CONFIG[prop]
+            results[prop] = {
+                'full_name':  cfg['full_name'],
+                'unit':       cfg['unit'],
+                'prediction': r['prediction'],
+                'lower':      r['lower'],
+                'upper':      r['upper'],
+                'joback':     round(y_joback, 3),
+                'residual':   round(r['prediction'] - y_joback, 4 if prop == 'Vc' else 3),
+            }
+        except Exception as e:
+            results[prop] = {'error': str(e)}
+    return results, None
 
-def build_prop_card(prop: str, data: dict, delay_ms: int = 0) -> str:cfg = PROPERTY_CONFIG[prop]if 'error' in data:return f"""
 
+def run_batch(entries: list, prop: str, models: dict) -> list:
+    unit = PROPERTY_CONFIG[prop]['unit']
+    rows = []
+    for entry in entries:
+        smiles = entry.get('smiles', '').strip()
+        name   = entry.get('name', smiles[:30])
+        valid, err = validate_smiles(smiles)
+        if not valid:
+            rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,
+                         'Lower 95%': None, 'Upper 95%': None,
+                         'Joback': None, 'Unit': unit,
+                         'Status': f'Error: {err}'})
+            continue
+        y_joback = get_joback_prediction(smiles, prop)
+        if y_joback is None:
+            rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,
+                         'Lower 95%': None, 'Upper 95%': None,
+                         'Joback': None, 'Unit': unit, 'Status': 'Joback failed'})
+            continue
+        graph = mol_to_graph(smiles, y_joback, get_joback_groups(smiles))
+        if graph is None:
+            rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,
+                         'Lower 95%': None, 'Upper 95%': None,
+                         'Joback': None, 'Unit': unit, 'Status': 'Graph build failed'})
+            continue
+        try:
+            r = predict_property(models[prop], graph, prop, DEVICE)
+            rows.append({
+                'Name': name, 'SMILES': smiles,
+                'Prediction': r['prediction'],
+                'Lower 95%':  r['lower'],
+                'Upper 95%':  r['upper'],
+                'Joback':     round(y_joback, 3),
+                'Unit':       unit, 'Status': 'OK',
+            })
+        except Exception as e:
+            rows.append({'Name': name, 'SMILES': smiles, 'Prediction': None,
+                         'Lower 95%': None, 'Upper 95%': None,
+                         'Joback': None, 'Unit': unit, 'Status': f'Error: {e}'})
+    return rows
+
+
+def build_prop_card(prop: str, data: dict, delay_ms: int = 0) -> str:
+    cfg = PROPERTY_CONFIG[prop]
+    if 'error' in data:
+        return f"""
 <div class="prop-card error-card" style="animation-delay:{delay_ms}ms">
   <div class="prop-card-header">
     <div class="prop-name">{prop}</div>
@@ -553,25 +679,24 @@ def build_prop_card(prop: str, data: dict, delay_ms: int = 0) -> str:cfg = PROPE
   <div class="prop-meta" style="color:#f87171">{data['error']}</div>
 </div>"""
 
-r        = data
-rng      = r['upper'] - r['lower']
-pad      = rng * 0.3
-bar_min  = r['lower'] - pad
-bar_max  = r['upper'] + pad
-bar_rng  = bar_max - bar_min
+    r        = data
+    rng      = r['upper'] - r['lower']
+    pad      = rng * 0.3
+    bar_min  = r['lower'] - pad
+    bar_max  = r['upper'] + pad
+    bar_rng  = bar_max - bar_min
 
-fill_left   = (r['lower']      - bar_min) / bar_rng * 100
-fill_right  = 100 - (r['upper'] - bar_min) / bar_rng * 100
-marker_left = (r['prediction'] - bar_min) / bar_rng * 100
+    fill_left   = (r['lower']      - bar_min) / bar_rng * 100
+    fill_right  = 100 - (r['upper'] - bar_min) / bar_rng * 100
+    marker_left = (r['prediction'] - bar_min) / bar_rng * 100
 
-res       = r['residual']
-res_cls   = 'residual-pos' if res >= 0 else 'residual-neg'
-res_sign  = '+' if res >= 0 else ''
-res_fmt   = '.4f' if prop == 'Vc' else '.2f'
-val_fmt   = '.4f' if prop == 'Vc' else '.3f'
+    res       = r['residual']
+    res_cls   = 'residual-pos' if res >= 0 else 'residual-neg'
+    res_sign  = '+' if res >= 0 else ''
+    res_fmt   = '.4f' if prop == 'Vc' else '.2f'
+    val_fmt   = '.4f' if prop == 'Vc' else '.3f'
 
-return f"""
-
+    return f"""
 <div class="prop-card" style="animation-delay:{delay_ms}ms">
   <div class="prop-card-header">
     <div class="prop-name">{prop}</div>
@@ -595,32 +720,33 @@ return f"""
   </div>
 </div>"""
 
-── Main ──────────────────────────────────────────────────────────────────────
 
-def main():models = load_models()loaded = list(models.keys())
+# ── Main ──────────────────────────────────────────────────────────────────────
+def main():
+    models = load_models()
+    loaded = list(models.keys())
 
-for key in ('results', 'show_mode', 'show_prop'):
-    if key not in st.session_state:
-        st.session_state[key] = None
+    for key in ('results', 'show_mode', 'show_prop'):
+        if key not in st.session_state:
+            st.session_state[key] = None
 
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-st.markdown(HEADER_HTML, unsafe_allow_html=True)
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.markdown(HEADER_HTML, unsafe_allow_html=True)
 
-if not loaded:
-    st.error("No model weights found in `models/`. Copy your `.pth` files there and restart.")
+    if not loaded:
+        st.error("No model weights found in `models/`. Copy your `.pth` files there and restart.")
 
-tab_single, tab_batch, tab_about = st.tabs(
-    ["Single Molecule", "Batch", "About"]
-)
+    tab_single, tab_batch, tab_about = st.tabs(
+        ["Single Molecule", "Batch", "About"]
+    )
 
-# ── Single Molecule ───────────────────────────────────────────────────────
-with tab_single:
-    col_left, col_right = st.columns([5, 7], gap="large")
+    # ── Single Molecule ───────────────────────────────────────────────────────
+    with tab_single:
+        col_left, col_right = st.columns([5, 7], gap="large")
 
-    with col_left:
-        # Card header
-        st.markdown("""
-
+        with col_left:
+            # Card header
+            st.markdown("""
 <div style="display:flex;align-items:center;gap:12px;
             margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #002E5D;">
   <span class="jr-card-icon">&#x25B3;</span>
@@ -628,72 +754,71 @@ with tab_single:
                font-weight:600;color:#0d0d0d;">Molecule Input</span>
 </div>""", unsafe_allow_html=True)
 
-        smiles = st.text_input(
-            "SMILES String",
-            placeholder="e.g.  CCO   or   c1ccccc1",
-        )
+            smiles = st.text_input(
+                "SMILES String",
+                placeholder="e.g.  CCO   or   c1ccccc1",
+            )
 
-        predict_all = st.button(
-            "Predict All Properties", type="primary",
-            use_container_width=True, disabled=not loaded,
-        )
+            predict_all = st.button(
+                "Predict All Properties", type="primary",
+                use_container_width=True, disabled=not loaded,
+            )
 
-        st.markdown(
-            '<div class="jr-divider"><span>or predict a single property</span></div>',
-            unsafe_allow_html=True,
-        )
+            st.markdown(
+                '<div class="jr-divider"><span>or predict a single property</span></div>',
+                unsafe_allow_html=True,
+            )
 
-        available = {
-            k: f"{k} — {v['full_name']}"
-            for k, v in PROPERTY_CONFIG.items() if k in loaded
-        }
-        prop_sel = st.selectbox(
-            "Property",
-            [""] + list(available.keys()),
-            format_func=lambda k: "— select —" if k == "" else available.get(k, k),
-        )
+            available = {
+                k: f"{k} — {v['full_name']}"
+                for k, v in PROPERTY_CONFIG.items() if k in loaded
+            }
+            prop_sel = st.selectbox(
+                "Property",
+                [""] + list(available.keys()),
+                format_func=lambda k: "— select —" if k == "" else available.get(k, k),
+            )
 
-        predict_one = st.button(
-            "Predict Selected", type="secondary",
-            use_container_width=True,
-            disabled=(not loaded or not prop_sel),
-        )
+            predict_one = st.button(
+                "Predict Selected", type="secondary",
+                use_container_width=True,
+                disabled=(not loaded or not prop_sel),
+            )
 
-        # Run inference
-        if predict_all:
-            if not smiles:
-                st.warning("Please enter a SMILES string.")
-            else:
-                with st.spinner("Running inference…"):
-                    results, err = run_single(smiles, models)
-                if err:
-                    st.error(err)
+            # Run inference
+            if predict_all:
+                if not smiles:
+                    st.warning("Please enter a SMILES string.")
                 else:
-                    st.session_state.results   = results
-                    st.session_state.show_mode = 'all'
-                    st.session_state.show_prop = None
+                    with st.spinner("Running inference…"):
+                        results, err = run_single(smiles, models)
+                    if err:
+                        st.error(err)
+                    else:
+                        st.session_state.results   = results
+                        st.session_state.show_mode = 'all'
+                        st.session_state.show_prop = None
 
-        elif predict_one:
-            if not smiles:
-                st.warning("Please enter a SMILES string.")
-            else:
-                with st.spinner("Running inference…"):
-                    results, err = run_single(smiles, models)
-                if err:
-                    st.error(err)
+            elif predict_one:
+                if not smiles:
+                    st.warning("Please enter a SMILES string.")
                 else:
-                    st.session_state.results   = results
-                    st.session_state.show_mode = 'single'
-                    st.session_state.show_prop = prop_sel
+                    with st.spinner("Running inference…"):
+                        results, err = run_single(smiles, models)
+                    if err:
+                        st.error(err)
+                    else:
+                        st.session_state.results   = results
+                        st.session_state.show_mode = 'single'
+                        st.session_state.show_prop = prop_sel
 
-        # Molecule visualisation
-        if smiles:
-            valid, verr = validate_smiles(smiles)
-            if valid:
-                svg = smiles_to_svg(smiles)
-                if svg:
-                    st.markdown(f"""
-
+            # Molecule visualisation
+            if smiles:
+                valid, verr = validate_smiles(smiles)
+                if valid:
+                    svg = smiles_to_svg(smiles)
+                    if svg:
+                        st.markdown(f"""
 <div class="jr-card">
   <div class="jr-card-header">
     <span class="jr-card-icon">&#x25C8;</span>
@@ -704,107 +829,104 @@ with tab_single:
                 else:
                     st.warning(verr)
 
-    with col_right:
-        if st.session_state.results and st.session_state.show_mode:
-            ORDER       = ['Tm', 'Tb', 'Tc', 'Pc', 'Vc']
-            show_props  = (
-                [p for p in ORDER if p in st.session_state.results]
-                if st.session_state.show_mode == 'all'
-                else ([st.session_state.show_prop]
-                      if st.session_state.show_prop in st.session_state.results
-                      else [])
-            )
-            cards_html = ''.join(
-                build_prop_card(p, st.session_state.results[p], i * 60)
-                for i, p in enumerate(show_props)
-            )
-            grid_class = 'results-all' if st.session_state.show_mode == 'all' else ''
-            st.markdown(
-                f'<div class="{grid_class}">{cards_html}</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown("""
-
+        with col_right:
+            if st.session_state.results and st.session_state.show_mode:
+                ORDER       = ['Tm', 'Tb', 'Tc', 'Pc', 'Vc']
+                show_props  = (
+                    [p for p in ORDER if p in st.session_state.results]
+                    if st.session_state.show_mode == 'all'
+                    else ([st.session_state.show_prop]
+                          if st.session_state.show_prop in st.session_state.results
+                          else [])
+                )
+                cards_html = ''.join(
+                    build_prop_card(p, st.session_state.results[p], i * 60)
+                    for i, p in enumerate(show_props)
+                )
+                grid_class = 'results-all' if st.session_state.show_mode == 'all' else ''
+                st.markdown(
+                    f'<div class="{grid_class}">{cards_html}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown("""
 <div class="idle-state">
   <p>Enter a SMILES string and click<br>
   <strong>Predict All Properties</strong> to begin.</p>
 </div>""", unsafe_allow_html=True)
 
-# ── Batch ─────────────────────────────────────────────────────────────────
-with tab_batch:
-    st.markdown("""
-
+    # ── Batch ─────────────────────────────────────────────────────────────────
+    with tab_batch:
+        st.markdown("""
 <div class="batch-info">
   Upload a CSV with a <code>SMILES</code> column (optional <code>Name</code> column).
   Maximum 500 molecules per batch.
 </div>""", unsafe_allow_html=True)
 
-    col_b1, col_b2 = st.columns(2, gap="large")
-    with col_b1:
-        b_available = {
-            k: f"{k} — {v['full_name']}"
-            for k, v in PROPERTY_CONFIG.items() if k in loaded
-        }
-        batch_prop = st.selectbox(
-            "Property",
-            list(b_available.keys()),
-            format_func=lambda k: b_available[k],
-            key="batch_prop",
-        ) if b_available else None
+        col_b1, col_b2 = st.columns(2, gap="large")
+        with col_b1:
+            b_available = {
+                k: f"{k} — {v['full_name']}"
+                for k, v in PROPERTY_CONFIG.items() if k in loaded
+            }
+            batch_prop = st.selectbox(
+                "Property",
+                list(b_available.keys()),
+                format_func=lambda k: b_available[k],
+                key="batch_prop",
+            ) if b_available else None
 
-    with col_b2:
-        uploaded = st.file_uploader("CSV File", type="csv")
+        with col_b2:
+            uploaded = st.file_uploader("CSV File", type="csv")
 
-    col_run, col_dl = st.columns([1, 3])
-    with col_run:
-        run_batch_btn = st.button(
-            "Run Batch", type="primary",
-            disabled=(batch_prop is None or uploaded is None),
-        )
-
-    if run_batch_btn and uploaded and batch_prop:
-        df_in      = pd.read_csv(uploaded)
-        smiles_col = next(
-            (c for c in df_in.columns if c.upper() == 'SMILES'), None
-        )
-        if smiles_col is None:
-            st.error("CSV must contain a **SMILES** column.")
-        else:
-            name_col = next(
-                (c for c in df_in.columns if c.lower() == 'name'), None
-            )
-            entries = [
-                {'smiles': str(row[smiles_col]),
-                 **(({'name': str(row[name_col])}) if name_col else {})}
-                for _, row in df_in.iterrows()
-            ]
-            if len(entries) > 500:
-                st.warning(f"Truncating to first 500 rows ({len(entries)} provided).")
-                entries = entries[:500]
-
-            with st.spinner(f"Running batch ({len(entries)} molecules)…"):
-                rows = run_batch(entries, batch_prop, models)
-
-            df_out = pd.DataFrame(rows)
-            n_ok   = (df_out['Status'] == 'OK').sum()
-            n_err  = len(df_out) - n_ok
-            st.success(f"Done — {n_ok} succeeded, {n_err} failed.")
-            st.dataframe(df_out, use_container_width=True, hide_index=True)
-
-            csv_bytes = df_out.to_csv(index=False).encode()
-            st.download_button(
-                "⤓  Download CSV",
-                data=csv_bytes,
-                file_name=f"jrmpnn_{batch_prop.lower()}_predictions.csv",
-                mime="text/csv",
+        col_run, col_dl = st.columns([1, 3])
+        with col_run:
+            run_batch_btn = st.button(
+                "Run Batch", type="primary",
+                disabled=(batch_prop is None or uploaded is None),
             )
 
-# ── About ─────────────────────────────────────────────────────────────────
-with tab_about:
-    status_rows = ''.join(
-        f"""<tr>
+        if run_batch_btn and uploaded and batch_prop:
+            df_in      = pd.read_csv(uploaded)
+            smiles_col = next(
+                (c for c in df_in.columns if c.upper() == 'SMILES'), None
+            )
+            if smiles_col is None:
+                st.error("CSV must contain a **SMILES** column.")
+            else:
+                name_col = next(
+                    (c for c in df_in.columns if c.lower() == 'name'), None
+                )
+                entries = [
+                    {'smiles': str(row[smiles_col]),
+                     **(({'name': str(row[name_col])}) if name_col else {})}
+                    for _, row in df_in.iterrows()
+                ]
+                if len(entries) > 500:
+                    st.warning(f"Truncating to first 500 rows ({len(entries)} provided).")
+                    entries = entries[:500]
 
+                with st.spinner(f"Running batch ({len(entries)} molecules)…"):
+                    rows = run_batch(entries, batch_prop, models)
+
+                df_out = pd.DataFrame(rows)
+                n_ok   = (df_out['Status'] == 'OK').sum()
+                n_err  = len(df_out) - n_ok
+                st.success(f"Done — {n_ok} succeeded, {n_err} failed.")
+                st.dataframe(df_out, use_container_width=True, hide_index=True)
+
+                csv_bytes = df_out.to_csv(index=False).encode()
+                st.download_button(
+                    "⤓  Download CSV",
+                    data=csv_bytes,
+                    file_name=f"jrmpnn_{batch_prop.lower()}_predictions.csv",
+                    mime="text/csv",
+                )
+
+    # ── About ─────────────────────────────────────────────────────────────────
+    with tab_about:
+        status_rows = ''.join(
+            f"""<tr>
   <td><code>{prop}</code></td>
   <td>{cfg['full_name']}</td>
   <td>{cfg['unit']}</td>
@@ -817,8 +939,7 @@ with tab_about:
             for prop, cfg in PROPERTY_CONFIG.items()
         )
 
-    st.markdown(f"""
-
+        st.markdown(f"""
 <div class="about-card">
   <h2 class="about-title">JR-MPNN Architecture</h2>
   <p class="about-body">
@@ -877,4 +998,6 @@ with tab_about:
   </table>
 </div>""", unsafe_allow_html=True)
 
-if name == 'main':main()
+
+if __name__ == '__main__':
+    main()
