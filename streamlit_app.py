@@ -54,11 +54,21 @@ header[data-testid="stHeader"],
 footer { visibility: hidden !important; }
 
 /* ── Base ──────────────────────────────────────────────────── */
-html, body { font-family: 'Inter', sans-serif !important; }
-.stApp { background: #FFFFFF !important; }
+html, body {
+    font-family: 'Inter', sans-serif !important;
+}
+
+.stApp {
+    background: #FFFFFF !important;
+}
+
 .block-container {
-    padding: 0 !important;
-    max-width: 100% !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: var(--content-width) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 0 var(--page-gutter) 64px !important;
 }
 
 /* ── Custom header ─────────────────────────────────────────── */
