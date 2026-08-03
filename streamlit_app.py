@@ -40,6 +40,10 @@ CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@300;400;500&display=swap');
 
+:root {
+    --page-gutter: max(32px, calc((100vw - 1400px) / 2));
+}
+
 /* ── Hide Streamlit chrome ─────────────────────────────────── */
 header[data-testid="stHeader"],
 [data-testid="stToolbar"],
@@ -59,7 +63,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 /* ── Custom header ─────────────────────────────────────────── */
 .jr-header {
     background: #002E5D;
-    padding: 14px 48px;
+    padding: 14px var(--page-gutter);
     border-bottom: 1px solid #1a3f6f;
     margin-bottom: 0;
 }
@@ -83,7 +87,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 /* ── Tabs — fused with header ──────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
     background: #002E5D !important;
-    padding: 10px 48px 0 48px !important;
+    padding: 10px var(--page-gutter) 0 var(--page-gutter) !important;
     gap: 4px !important;
 }
 .stTabs [data-baseweb="tab"] {
@@ -108,7 +112,7 @@ html, body { font-family: 'Inter', sans-serif !important; }
 .stTabs [data-baseweb="tab-highlight"],
 .stTabs [data-baseweb="tab-border"] { display: none !important; }
 .stTabs [data-baseweb="tab-panel"] {
-    padding: 32px 48px 64px !important;
+    padding: 32px var(--page-gutter) 64px !important;
     background: #ffffff !important;
 }
 
@@ -515,6 +519,18 @@ html, body { font-family: 'Inter', sans-serif !important; }
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: none; }
+}
+
+/* ── Responsive page gutters ───────────────────────────────── */
+@media (max-width: 700px) {
+    :root {
+        --page-gutter: 18px;
+    }
+
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 24px !important;
+        padding-bottom: 40px !important;
+    }
 }
 
 /* ── Dataframe overrides ───────────────────────────────────── */
