@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DIPPRML</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- ─── Background grid ─────────────────────────────────────────────────────── -->
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<!-- ─── Header ──────────────────────────────────────────────────────────────── -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <span class="brand-badge">JR-MPNN</span>
+      <div class="brand-text">
+        <h1>Thermophysical Property Predictor</h1>
+        <p class="brand-sub">Joback Residual - Message Passing Neural Network</p>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <button class="nav-btn active" data-tab="single">Single Molecule</button>
+      <button class="nav-btn" data-tab="batch">Batch</button>
+      <button class="nav-btn" data-tab="about">About</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ─── Main ─────────────────────────────────────────────────────────────────── -->
+<main class="site-main">
+
+  <!-- ── Single molecule panel ──────────────────────────────────────────────── -->
+  <section id="tab-single" class="tab-panel active">
+    <div class="panel-grid">
+
+      <!-- Left: input column -->
+      <div class="col-input">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">⌬</span>
+            <h2>Molecule Input</h2>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="smiles-input">SMILES String</label>
+            <div class="smiles-row">
+              <input id="smiles-input" class="smiles-input" type="text"
+                     placeholder="e.g.  CCO   or   c1ccccc1" autocomplete="off" spellcheck="false" />
+              <button id="viz-btn" class="icon-btn" title="Visualize">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg>
+              </button>
+            </div>
+          
+          </div>
+
+          <div class="field-group mt-sm">
+            <button id="predict-all-btn" class="btn-primary btn-full">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Predict All Properties
+            </button>
+          </div>
+
+          <!-- Or select one property -->
+          <div class="divider"><span>or predict a single property</span></div>
+
+          <div class="field-group">
+            <label class="field-label" for="prop-select">Property</label>
+            <div class="select-wrap">
+              <select id="prop-select">
+                <option value="">— select —</option>
+                {% for key, cfg in properties.items() %}
+                <option value="{{ key }}" {% if key not in loaded %}disabled{% endif %}>
+                  {{ key }} — {{ cfg.full_name }}{% if key not in loaded %} (unavailable){% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="field-group mt-sm">
+            <button id="predict-one-btn" class="btn-secondary btn-full">
+              Predict Selected
+            </button>
+          </div>
+        </div>
+
+        <!-- Molecule visualisation card -->
+        <div id="mol-card" class="card mol-card hidden">
+          <div class="card-header">
+            <span class="card-icon">◈</span>
+            <h2>Structure</h2>
+            <div id="mol-badges" class="mol-badges"></div>
+          </div>
+          <div id="mol-svg-wrap" class="mol-svg-wrap"></div>
+        </div>
+      </div>
+
+      <!-- Right: results column -->
+      <div class="col-results">
+
+        <!-- Idle state -->
+        <div id="idle-state" class="idle-state">
+          <div class="idle-icon">⚗</div>
+          <p>Enter a SMILES string and click<br><strong>Predict All Properties</strong> to begin.</p>
+        </div>
+
+        <!-- Spinner -->
+        <div id="spinner" class="spinner-wrap hidden">
+          <div class="spinner"></div>
+          <p>Running inference…</p>
+        </div>
+
+        <!-- Error -->
+        <div id="error-box" class="error-box hidden">
+          <span class="error-icon">⚠</span>
+          <p id="error-msg"></p>
+        </div>
+
+        <!-- Results grid: all five properties -->
+        <div id="results-all" class="results-all hidden"></div>
+
+        <!-- Single property result -->
+        <div id="result-single" class="result-single hidden"></div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Batch panel ─────────────────────────────────────────────────────────── -->
+  <section id="tab-batch" class="tab-panel hidden">
+    <div class="batch-layout">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">≡</span>
+          <h2>Batch Prediction</h2>
+        </div>
+
+        <div class="batch-info">
+          Upload a CSV with a <code>SMILES</code> column (optional <code>Name</code> column).
+          Maximum 500 molecules per batch.
+        </div>
+
+        <div class="batch-row">
+          <div class="field-group">
+            <label class="field-label">Property</label>
+            <div class="select-wrap">
+              <select id="batch-prop-select">
+                <option value="">— select —</option>
+                {% for key, cfg in properties.items() %}
+                <option value="{{ key }}" {% if key not in loaded %}disabled{% endif %}>
+                  {{ key }} — {{ cfg.full_name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">CSV File</label>
+            <label class="file-drop" id="file-drop">
+              <input type="file" id="batch-file" accept=".csv" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="file-label">Choose file or drag &amp; drop</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="batch-actions">
+          <button id="batch-run-btn" class="btn-primary">Run Batch</button>
+          <button id="batch-clear-btn" class="btn-ghost">Clear</button>
+          <button id="batch-download-btn" class="btn-ghost hidden">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Download CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Batch results -->
+      <div id="batch-results" class="card hidden">
+        <div class="card-header">
+          <span class="card-icon">⊞</span>
+          <h2>Results</h2>
+          <div id="batch-stats" class="batch-stats"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="results-table" id="batch-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>SMILES</th>
+                <th>Prediction</th>
+                <th>95% CI Lower</th>
+                <th>95% CI Upper</th>
+                <th>Joback</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="batch-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── About panel ─────────────────────────────────────────────────────────── -->
+  <section id="tab-about" class="tab-panel hidden">
+    <div class="about-layout">
+      <div class="card about-card">
+        <h2 class="about-title">JR-MPNN Architecture</h2>
+        <p class="about-body">
+          The <strong>Joback-Residual Message Passing Neural Network (JR-MPNN)</strong> is a hybrid
+          graph neural network that combines classical Joback group-contribution estimates with a
+          data-driven residual correction. Predictions follow the form:
+        </p>
+        <div class="equation">ŷ = y<sub>Joback</sub> + r̂(G, c)</div>
+        <p class="about-body">
+          where G is the molecular graph and c is the Joback conditioning vector
+          [y<sub>Joback</sub>, g<sub>1</sub>, …, g<sub>41</sub>].
+        </p>
+
+        <h3 class="about-sub">Key Design Choices</h3>
+        <div class="feature-grid">
+          <div class="feature-item">
+            <span class="feature-tag">Triple Pooling</span>
+            <p>Global add + mean + max pooling concatenated into a single embedding — captures size, density, and dominant features simultaneously.</p>
+          </div>
+          <div class="feature-item">
+            <span class="feature-tag">XOR Backtracking Prevention</span>
+            <p>Directed message passing prevents messages from immediately reversing along the same bond, improving long-range communication.</p>
+          </div>
+          <div class="feature-item">
+            <span class="feature-tag">Joback Conditioning</span>
+            <p>Functional group counts concatenated directly into the readout MLP, anchoring predictions to interpretable thermodynamic baselines.</p>
+          </div>
+          <div class="feature-item">
+            <span class="feature-tag">Conformal UQ</span>
+            <p>Adaptive prediction intervals via embedding-norm difficulty estimation, providing 95% marginal coverage guarantees.</p>
+          </div>
+        </div>
+
+        <h3 class="about-sub">Data & Training</h3>
+        <p class="about-body">
+          All models trained on DIPPR 801 data with 5-fold cross-validation.
+          Conformal calibration performed on a held-out calibration split
+          (never seen during training). The model is intended for organic compounds
+          within the DIPPR chemical space.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ─── Footer ──────────────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <p>JR-MPNN · Joback-Residual Message Passing Neural Network · Built with PyTorch &amp; RDKit</p>
+</footer>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
